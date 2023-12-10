@@ -85,7 +85,7 @@ if os.path.isfile(checkpoint_file):
     policy_model.load_state_dict(checkpoint['policy_model_state_dict'])
     target_model.load_state_dict(checkpoint['target_model_state_dict'])
     optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-    epsilon.load_state_dict(checkpoint['epsilon'])
+    epsilon = checkpoint['epsilon']
     start_episode = checkpoint['episode']
     logger.info(f"Loaded checkpoint from episode {start_episode}")
 else:
@@ -99,7 +99,7 @@ for episode in progress_bar:
     state = preprocess_observation(env.reset())
     state = torch.tensor(state, dtype=torch.float32)
     total_reward = 0
-
+    total_loss = 0
     while True:
         # Use epsilon-greedy strategy for action selection
         if np.random.rand() <= epsilon:
@@ -131,7 +131,9 @@ for episode in progress_bar:
         if done:
             break
 
-        train(policy_model, target_model, optimizer, replay_buffer, batch_size, gamma)
+        loss = train(policy_model, target_model, optimizer, replay_buffer, batch_size, gamma)
+        if loss != None:
+            total_loss += loss
 
     # Update tqdm description with the latest total reward
     progress_bar.set_description(f"Ep: {episode} Reward: {total_reward}")
@@ -151,7 +153,7 @@ for episode in progress_bar:
     if episode % N == 0:
         target_model.load_state_dict(policy_model.state_dict())
 
-    logger.info(f'Episode: {episode}, Total Steps: {total_steps}, Total Reward: {total_reward}')
+    logger.info(f'{episode},{total_steps},{total_reward},{total_loss},{epsilon}')
     # print(f'Episode: {episode}, Total Steps: {total_steps}, Total Reward: {total_reward}')
 
 env.close()

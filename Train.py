@@ -28,3 +28,5 @@ def train(policy_model, target_model, optimizer, replay_buffer, batch_size, gamm
     loss.backward()
     optimizer.step()
 
+    return loss
+

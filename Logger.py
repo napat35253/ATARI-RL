@@ -5,6 +5,8 @@ class Logger:
         # Create a custom logger
         self.logger = logging.getLogger(__name__)
 
+        custom_date_format = '%Y-%m-%d %H:%M:%S'
+
         # Set the level of the logger
         self.logger.setLevel(logging.INFO)
 
@@ -12,8 +14,8 @@ class Logger:
         file_handler = logging.FileHandler(log_file)
 
         # Set a format for the log messages
-        log_format = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-        formatter = logging.Formatter(log_format)
+        log_format = '%(asctime)s,%(name)s,%(levelname)s,%(message)s'
+        formatter = logging.Formatter(log_format,datefmt=custom_date_format)
         file_handler.setFormatter(formatter)
 
         # Add the file handler to the logger

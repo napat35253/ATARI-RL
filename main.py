@@ -1,13 +1,11 @@
-# main.py
 import gym
 import torch.optim as optim
 import torch
-from DuelCNN import DuelCNN
+from DuelingDDQN import DuelingDDQN
 from ReplayBuffer import ReplayBuffer
 from Train import train
 import cv2
 import numpy as np
-# import logging
 import os
 from tqdm import tqdm
 from Logger import Logger
@@ -15,9 +13,14 @@ from Logger import Logger
 input_shape = (1, 84, 64)
 n_actions = 6 
 batch_size = 32
-gamma = 0.99
-epsilon = 0.001
-n_episode = 100000
+gamma = 0.97
+alpha = 0.00025
+epsilon_start = 1.0
+epsilon_final = 0.05
+epsilon_decay = 0.99
+epsilon = epsilon_start
+n_episode = 1000
+N = 10
 
 def preprocess_observation(obs_tuple, new_size=(84, 64), crop_top=20):
     """
@@ -62,22 +65,27 @@ def load_checkpoint(filename="./checkpoint/pong_checkpoint.pth"):
 # Initialize environment, model, optimizer, and replay buffer
 # env = gym.make('ALE/Pong-v5', render_mode="human")
 env = gym.make('ALE/Pong-v5', render_mode="rgb_array")
-model = DuelCNN(input_shape[1],input_shape[2], n_actions)
-optimizer = optim.Adam(model.parameters(), lr=epsilon)
+policy_model = DuelingDDQN(input_shape[1], input_shape[2], n_actions)
+target_model = DuelingDDQN(input_shape[1], input_shape[2], n_actions) 
+optimizer = optim.Adam(policy_model.parameters(), lr=alpha)
 replay_buffer = ReplayBuffer(10000)
+
+# Initialize target model with policy model weights
+target_model.load_state_dict(policy_model.state_dict())
 
 total_steps = 0
 
 # Setup logging
 logger = Logger('./log/training_log.log')
 
-
 checkpoint_file = "./checkpoint/pong_checkpoint_0.pth"
 
 if os.path.isfile(checkpoint_file):
     checkpoint = load_checkpoint(checkpoint_file)
-    model.load_state_dict(checkpoint['model_state_dict'])
+    policy_model.load_state_dict(checkpoint['policy_model_state_dict'])
+    target_model.load_state_dict(checkpoint['target_model_state_dict'])
     optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+    epsilon.load_state_dict(checkpoint['epsilon'])
     start_episode = checkpoint['episode']
     logger.info(f"Loaded checkpoint from episode {start_episode}")
 else:
@@ -93,10 +101,17 @@ for episode in progress_bar:
     total_reward = 0
 
     while True:
-        if replay_buffer.__len__() > batch_size:
-            action = model(state.unsqueeze(0)).max(1)[1].item()
-        else:
+        # Use epsilon-greedy strategy for action selection
+        if np.random.rand() <= epsilon:
+            # Exploration: choose a random action
             action = env.action_space.sample()
+        else:
+            # Exploitation: choose the best action from policy model
+            if replay_buffer.__len__() > batch_size:
+                action = policy_model(state.unsqueeze(0)).max(1)[1].item()
+            else:
+                # Still choose random action if buffer not filled
+                action = env.action_space.sample()
 
         raw_next_state, reward, terminated, truncated, info = env.step(action)
         next_state = preprocess_observation(raw_next_state)
@@ -116,17 +131,25 @@ for episode in progress_bar:
         if done:
             break
 
-        train(model, optimizer, replay_buffer, batch_size, gamma)
+        train(policy_model, target_model, optimizer, replay_buffer, batch_size, gamma)
 
     # Update tqdm description with the latest total reward
     progress_bar.set_description(f"Ep: {episode} Reward: {total_reward}")
 
+    epsilon = max(epsilon_final, epsilon_decay * epsilon)
+
     if episode % 20 == 0:
         save_checkpoint({
             'episode': episode,
-            'model_state_dict': model.state_dict(),
+            'epsilon': epsilon,
+            'policy_model_state_dict': policy_model.state_dict(),
+            'target_model_state_dict': target_model.state_dict(),
             'optimizer_state_dict': optimizer.state_dict(),
         }, checkpoint_file)
+
+    # Update target network weights every N episodes
+    if episode % N == 0:
+        target_model.load_state_dict(policy_model.state_dict())
 
     logger.info(f'Episode: {episode}, Total Steps: {total_steps}, Total Reward: {total_reward}')
     # print(f'Episode: {episode}, Total Steps: {total_steps}, Total Reward: {total_reward}')

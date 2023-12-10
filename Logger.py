@@ -1,7 +1,7 @@
 import logging
 
 class Logger:
-    def __init__(self, log_file='training_log.log'):
+    def __init__(self, log_file='./log/training_log.log'):
         # Create a custom logger
         self.logger = logging.getLogger(__name__)
 

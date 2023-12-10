@@ -10,17 +10,28 @@ import os
 from tqdm import tqdm
 from Logger import Logger
 
+## Hyperparameters
 input_shape = (1, 84, 64)
 n_actions = 6 
-batch_size = 32
+batch_size = 64
+replay_buffer = 10000
+
 gamma = 0.97
 alpha = 0.00025
+
 epsilon_start = 1.0
 epsilon_final = 0.05
 epsilon_decay = 0.99
 epsilon = epsilon_start
+
 n_episode = 1000
-N = 10
+n_update_target_network = 10
+n_save_model = 10
+
+## NAMING
+gym_game = 'ALE/Pong-v5'
+checkpoint_name = "pong_checkpoint_0"
+log_name = "training_log"
 
 def preprocess_observation(obs_tuple, new_size=(84, 64), crop_top=20):
     """
@@ -64,11 +75,11 @@ def load_checkpoint(filename="./checkpoint/pong_checkpoint.pth"):
 
 # Initialize environment, model, optimizer, and replay buffer
 # env = gym.make('ALE/Pong-v5', render_mode="human")
-env = gym.make('ALE/Pong-v5', render_mode="rgb_array")
+env = gym.make(gym_game, render_mode="rgb_array")
 policy_model = DuelingDDQN(input_shape[1], input_shape[2], n_actions)
 target_model = DuelingDDQN(input_shape[1], input_shape[2], n_actions) 
 optimizer = optim.Adam(policy_model.parameters(), lr=alpha)
-replay_buffer = ReplayBuffer(10000)
+replay_buffer = ReplayBuffer(replay_buffer)
 
 # Initialize target model with policy model weights
 target_model.load_state_dict(policy_model.state_dict())
@@ -76,9 +87,9 @@ target_model.load_state_dict(policy_model.state_dict())
 total_steps = 0
 
 # Setup logging
-logger = Logger('./log/training_log.log')
+logger = Logger(f"./log/{log_name}.log")
 
-checkpoint_file = "./checkpoint/pong_checkpoint_0.pth"
+checkpoint_file = f"./checkpoint/{checkpoint_name}.pth"
 
 if os.path.isfile(checkpoint_file):
     checkpoint = load_checkpoint(checkpoint_file)
@@ -140,7 +151,7 @@ for episode in progress_bar:
 
     epsilon = max(epsilon_final, epsilon_decay * epsilon)
 
-    if episode % 20 == 0:
+    if episode % n_save_model == 0:
         save_checkpoint({
             'episode': episode,
             'epsilon': epsilon,
@@ -150,7 +161,7 @@ for episode in progress_bar:
         }, checkpoint_file)
 
     # Update target network weights every N episodes
-    if episode % N == 0:
+    if episode % n_update_target_network == 0:
         target_model.load_state_dict(policy_model.state_dict())
 
     logger.info(f'{episode},{total_steps},{total_reward},{total_loss},{epsilon}')

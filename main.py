@@ -11,17 +11,17 @@ from tqdm import tqdm
 from Logger import Logger
 
 ## Hyperparameters
-input_shape = (1, 84, 64)
-n_actions = 6 
-batch_size = 64
+input_shape = (1, 84, 84)
+n_actions = 6
+batch_size = 32
 replay_buffer = 10000
 
-gamma = 0.97
-alpha = 0.00025
+gamma = 0.999
+alpha = 0.001
 
 epsilon_start = 1.0
 epsilon_final = 0.05
-epsilon_decay = 0.99
+epsilon_decay = 0.999
 epsilon = epsilon_start
 
 n_episode = 1000
@@ -30,31 +30,27 @@ n_save_model = 10
 
 ## NAMING
 gym_game = 'ALE/Pong-v5'
-checkpoint_name = "pong_checkpoint_0"
-log_name = "training_log"
+checkpoint_name = "pong_checkpoint_2"
+log_name = "training_log_2"
 
-def preprocess_observation(obs_tuple, new_size=(84, 64), crop_top=20):
+def preprocess_observation(obs_tuple, new_size=(84, 84)):
     """
     Preprocess the observation (frame):
-    1. Crop the top part of the image
-    2. Convert to grayscale if necessary
-    3. Resize
-    4. Normalize pixel values
+    1. Convert to grayscale if necessary
+    2. Resize
+    3. Normalize pixel values
     """
     if obs_tuple is None:
         return np.zeros((1, new_size[0], new_size[1]), dtype=np.float32)
 
     obs = obs_tuple[0]  # Extract the image from the tuple
 
-    # Crop the top part of the image
-    cropped_obs = obs[crop_top:, :, :] if obs.ndim == 3 else obs[crop_top:, :]
-
     # Check if the image is already grayscale
-    if cropped_obs.ndim == 3 and cropped_obs.shape[2] == 3:
+    if obs.ndim == 3 and obs.shape[2] == 3:
         # Convert to grayscale
-        gray = cv2.cvtColor(cropped_obs, cv2.COLOR_RGB2GRAY)
+        gray = cv2.cvtColor(obs, cv2.COLOR_RGB2GRAY)
     else:
-        gray = cropped_obs  # If already grayscale
+        gray = obs  # If already grayscale
 
     # Resize
     resized = cv2.resize(gray, new_size, interpolation=cv2.INTER_AREA)
@@ -76,6 +72,7 @@ def load_checkpoint(filename="./checkpoint/pong_checkpoint.pth"):
 # Initialize environment, model, optimizer, and replay buffer
 # env = gym.make('ALE/Pong-v5', render_mode="human")
 env = gym.make(gym_game, render_mode="rgb_array")
+# env = gym.make(gym_game)
 policy_model = DuelingDDQN(input_shape[1], input_shape[2], n_actions)
 target_model = DuelingDDQN(input_shape[1], input_shape[2], n_actions) 
 optimizer = optim.Adam(policy_model.parameters(), lr=alpha)
@@ -111,6 +108,7 @@ for episode in progress_bar:
     state = torch.tensor(state, dtype=torch.float32)
     total_reward = 0
     total_loss = 0
+
     while True:
         # Use epsilon-greedy strategy for action selection
         if np.random.rand() <= epsilon:

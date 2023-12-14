@@ -24,7 +24,7 @@ epsilon_final = 0.05
 epsilon_decay = 0.999
 epsilon = epsilon_start
 
-n_episode = 1000
+n_episode = 2000
 n_update_target_network = 10
 n_save_model = 10
 
@@ -69,12 +69,15 @@ def save_checkpoint(state, filename="./checkpoint/pong_checkpoint.pth"):
 def load_checkpoint(filename="./checkpoint/pong_checkpoint.pth"):
     return torch.load(filename)
 
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+print(f"Using device: {device}")
+
 # Initialize environment, model, optimizer, and replay buffer
 # env = gym.make('ALE/Pong-v5', render_mode="human")
 env = gym.make(gym_game, render_mode="rgb_array")
 # env = gym.make(gym_game)
-policy_model = DuelingDDQN(input_shape[1], input_shape[2], n_actions)
-target_model = DuelingDDQN(input_shape[1], input_shape[2], n_actions) 
+policy_model = DuelingDDQN(input_shape[1], input_shape[2], n_actions).to(device)
+target_model = DuelingDDQN(input_shape[1], input_shape[2], n_actions).to(device)
 optimizer = optim.Adam(policy_model.parameters(), lr=alpha)
 replay_buffer = ReplayBuffer(replay_buffer)
 
@@ -92,6 +95,8 @@ if os.path.isfile(checkpoint_file):
     checkpoint = load_checkpoint(checkpoint_file)
     policy_model.load_state_dict(checkpoint['policy_model_state_dict'])
     target_model.load_state_dict(checkpoint['target_model_state_dict'])
+    policy_model = policy_model.to(device)
+    target_model = target_model.to(device)
     optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
     epsilon = checkpoint['epsilon']
     start_episode = checkpoint['episode']
@@ -105,7 +110,7 @@ progress_bar = tqdm(range(start_episode, n_episode), desc="Training Episodes")
 for episode in progress_bar:
 
     state = preprocess_observation(env.reset())
-    state = torch.tensor(state, dtype=torch.float32)
+    state = torch.tensor(state, dtype=torch.float32).to(device)
     total_reward = 0
     total_loss = 0
 
@@ -124,7 +129,7 @@ for episode in progress_bar:
 
         raw_next_state, reward, terminated, truncated, info = env.step(action)
         next_state = preprocess_observation(raw_next_state)
-        next_state = torch.tensor(next_state, dtype=torch.float32)
+        next_state = torch.tensor(next_state, dtype=torch.float32).to(device)
 
         # Consider the episode done whether it's terminated or truncated
         done = terminated or truncated
@@ -161,6 +166,7 @@ for episode in progress_bar:
     # Update target network weights every N episodes
     if episode % n_update_target_network == 0:
         target_model.load_state_dict(policy_model.state_dict())
+        target_model = target_model.to(device)
 
     logger.info(f'{episode},{total_steps},{total_reward},{total_loss},{epsilon}')
     # print(f'Episode: {episode}, Total Steps: {total_steps}, Total Reward: {total_reward}')
